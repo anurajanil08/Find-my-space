@@ -7,6 +7,11 @@ from models.booking_model import Booking
 from schemas.user_schema import UserRegister
 from schemas.theatre_schema import TheatreCreate
 from core.security import hash_password, admin_required
+from models.organizer_application_model import OrganizerApplication
+from schemas.organizer_application_schema import OrganizerApplicationOut
+from datetime import datetime, timedelta
+
+
 
 router = APIRouter(prefix="/admin", tags=["Admin"])
 
@@ -37,35 +42,77 @@ def create_theatre(theatre: TheatreCreate, current_user = Depends(admin_required
     return {"message": "Theatre created", "theatre": new_theatre.name}
 
 
-@router.post("/organizers")
-def create_organizer(user: UserRegister, db: Session = Depends(get_db), admin: User = Depends(admin_required)):
+# @router.post("/organizers")
+# def create_organizer(user: UserRegister, db: Session = Depends(get_db), admin: User = Depends(admin_required)):
 
-    existing_user = db.query(User).filter(User.email == user.email).first()
-    if existing_user:
-        raise HTTPException(status_code=400, detail="Email already exists")
+#     existing_user = db.query(User).filter(User.email == user.email).first()
+#     if existing_user:
+#         raise HTTPException(status_code=400, detail="Email already exists")
 
-    hashed_pw = hash_password(user.password)
-    new_user = User(
-        name=user.name,
-        email=user.email,
-        password=hashed_pw,
-        role="ORGANIZER",
-        is_active=True
-    )
-    db.add(new_user)
+#     hashed_pw = hash_password(user.password)
+#     new_user = User(
+#         name=user.name,
+#         email=user.email,
+#         password=hashed_pw,
+#         role="ORGANIZER",
+#         is_active=True
+#     )
+#     db.add(new_user)
+#     db.commit()
+#     db.refresh(new_user)
+#     return {"message": f"Organizer {new_user.name} created successfully"}
+
+
+# @router.put("/organizers/{organizer_id}/approve")
+# def approve_organizer(organizer_id: int, approve: bool, db: Session = Depends(get_db), admin: User = Depends(admin_required)):
+
+#     organizer = db.query(User).filter(User.id == organizer_id, User.role == "ORGANIZER").first()
+#     if not organizer:
+#         raise HTTPException(status_code=404, detail="Organizer not found")
+
+#     organizer.is_active = approve
+#     db.commit()
+#     return {"message": f"Organizer {organizer.name} {'approved' if approve else 'blocked'}"}
+
+
+
+@router.get("/organizer-applications")
+def get_applications(db: Session = Depends(get_db), admin: User = Depends(admin_required)):
+    apps = db.query(OrganizerApplication).all()
+    return apps
+
+
+@router.put("/organizer-applications/{app_id}/approve")
+def approve_application(
+    app_id: int,
+    db: Session = Depends(get_db),
+    admin: User = Depends(admin_required)
+):
+    application = db.query(OrganizerApplication).filter(OrganizerApplication.id == app_id).first()
+    if not application:
+        raise HTTPException(status_code=404, detail="Application not found")
+
+    # Promote user to ORGANIZER
+    user = db.query(User).filter(User.id == application.user_id).first()
+    user.role = "ORGANIZER"
+
+    application.status = "APPROVED"
     db.commit()
-    db.refresh(new_user)
-    return {"message": f"Organizer {new_user.name} created successfully"}
+
+    return {"message": f"User {user.name} approved as ORGANIZER"}
 
 
-@router.put("/organizers/{organizer_id}/approve")
-def approve_organizer(organizer_id: int, approve: bool, db: Session = Depends(get_db), admin: User = Depends(admin_required)):
+@router.put("/organizer-applications/{app_id}/reject")
+def reject_application(
+    app_id: int,
+    db: Session = Depends(get_db),
+    admin: User = Depends(admin_required)
+):
+    application = db.query(OrganizerApplication).filter(OrganizerApplication.id == app_id).first()
+    if not application:
+        raise HTTPException(status_code=404, detail="Application not found")
 
-    organizer = db.query(User).filter(User.id == organizer_id, User.role == "ORGANIZER").first()
-    if not organizer:
-        raise HTTPException(status_code=404, detail="Organizer not found")
-
-    organizer.is_active = approve
+    application.status = "REJECTED"
     db.commit()
-    return {"message": f"Organizer {organizer.name} {'approved' if approve else 'blocked'}"}
 
+    return {"message": f"Application rejected"}

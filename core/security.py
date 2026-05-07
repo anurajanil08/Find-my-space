@@ -6,6 +6,9 @@ from fastapi.security import OAuth2PasswordBearer
 from fastapi import Depends, HTTPException
 from database import SessionLocal
 from models.user_model import User
+from models.organizer_application_model import OrganizerApplication
+import random
+import string
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
@@ -65,9 +68,23 @@ def admin_required(current_user: User = Depends(get_current_user)):
     return current_user
 
 def organizer_required(current_user: User = Depends(get_current_user)):
-    """Allow access only if the user is ORGANIZER"""
+    """Allow access only if user is an approved ORGANIZER"""
+
     if current_user.role != "ORGANIZER":
         raise HTTPException(status_code=403, detail="Organizer access required")
+
+    db = SessionLocal()
+
+    application = db.query(OrganizerApplication).filter(
+        OrganizerApplication.user_id == current_user.id,
+        OrganizerApplication.status == "APPROVED"
+    ).first()
+
+    db.close()
+
+    if not application:
+        raise HTTPException(status_code=403, detail="Organizer not approved by admin")
+
     return current_user
 
 def user_required(current_user: User = Depends(get_current_user)):
@@ -75,4 +92,15 @@ def user_required(current_user: User = Depends(get_current_user)):
     if current_user.role != "USER":
         raise HTTPException(status_code=403, detail="User access required")
     return current_user
+
+
+def generate_otp(length=6):
+    return ''.join(random.choices(string.digits, k=length))
+
+def send_otp_email(email: str, otp: str):
+    print(f"--- SENDING EMAIL TO {email} ---")
+    print(f"Your OTP Code is: {otp}")
+    print("---------------------------------")
+
+
 
